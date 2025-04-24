@@ -1,0 +1,82 @@
+[
+  {
+    "question": "Apa fungsi utama dari U-Net?",
+    "options": [
+      "Klasifikasi gambar",
+      "Segmentasi gambar",
+      "Pengenalan wajah",
+      "Kompresi gambar"
+    ],
+    "correctAnswers": [1]
+  },
+  {
+    "question": "Apa karakteristik arsitektur U-Net?",
+    "options": [
+      "Memiliki jalur contracting dan expanding",
+      "Menggunakan skip connections",
+      "Berbentuk seperti huruf U",
+      "Didesain khusus untuk segmentasi citra medis"
+    ],
+    "correctAnswers": [0, 1, 2, 3]
+  },
+  {
+    "question": "Apa fungsi dari skip connections pada U-Net?",
+    "options": [
+      "Mengurangi jumlah parameter",
+      "Mempercepat proses training",
+      "Menggabungkan informasi kontekstual dan spasial",
+      "Mencegah hilangnya informasi spasial"
+    ],
+    "correctAnswers": [2, 3]
+  },
+  {
+    "question": "Apa tujuan utama dari 'Contracting Path' (Encoder) dalam arsitektur U-Net?",
+    "options": [
+      "Meningkatkan resolusi spasial gambar.",
+      "Mengekstrak fitur kontekstual dan mengurangi resolusi spasial.",
+      "Menggabungkan fitur dari encoder dengan decoder.",
+      "Menghasilkan peta segmentasi akhir."
+    ],
+    "correctAnswers": [1]
+  },
+  {
+    "question": "Apa fungsi dari 'Skip Connections' pada U-Net?",
+    "options": [
+      "Mempercepat proses training.",
+      "Mengurangi jumlah parameter model.",
+      "Membantu decoder memulihkan detail spasial halus yang hilang selama down-sampling.",
+      "Hanya digunakan untuk visualisasi."
+    ],
+    "correctAnswers": [2]
+  },
+  {
+    "question": "Lapisan apa yang biasanya digunakan di bagian 'Expanding Path' (Decoder) untuk meningkatkan resolusi spasial?",
+    "options": [
+      "Max Pooling",
+      "Convolution",
+      "Up-Convolution (Transposed Convolution)",
+      "ReLU Activation"
+    ],
+    "correctAnswers": [2]
+  },
+  {
+    "question": "Manakah dari berikut ini yang merupakan karakteristik lapisan 'Bottleneck' pada U-Net?",
+    "options": [
+      "Memiliki resolusi spasial tertinggi.",
+      "Menggabungkan fitur dari input asli.",
+      "Menghubungkan Contracting Path dan Expanding Path.",
+      "Memiliki jumlah fitur (channels) paling sedikit."
+    ],
+    "correctAnswers": [2]
+  },
+  {
+    "question": "Operasi apa yang biasanya dilakukan setelah menggabungkan (concatenate) output Up-Convolution dengan fitur dari Skip Connection di Decoder?",
+    "options": [
+      "Max Pooling lagi",
+      "Satu atau lebih lapisan Konvolusi (+ ReLU)",
+      "Konvolusi 1x1 untuk output",
+      "Normalisasi Batch saja"
+    ],
+    "correctAnswers": [1]
+  }
+]

@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi Interaktif U-Net</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* Custom styles */
+        body { font-family: 'Inter', sans-serif; overflow: hidden; /* Prevent scrolling */ }
+        #canvas-container { width: 100%; height: 100vh; position: relative; } /* Full viewport height */
+        #info-panel {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            max-width: 250px; /* Limit width */
+            font-size: 0.875rem; /* text-sm */
+            z-index: 10;
+        }
+        #controls {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            display: flex;
+            gap: 0.5rem; /* Space between buttons */
+            z-index: 10;
+        }
+        .control-button {
+            background-color: #4a5568; /* gray-700 */
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .control-button:hover {
+            background-color: #2d3748; /* gray-800 */
+        }
+        .control-button:disabled {
+            background-color: #a0aec0; /* gray-500 */
+            cursor: not-allowed;
+        }
+        /* Style for highlighting active block */
+        .active-block {
+            /* Example styles - choose what looks best */
+            border: 2px solid yellow; /* Tambahkan border kuning */
+            box-shadow: 0 0 10px yellow; /* Tambahkan efek glow kuning */
+            /* Anda juga bisa mengubah background-color atau properti lainnya */
+        }
+        /* Style for skip connection visualization (Handled by Three.js) */
+        #feature-map-display {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ccc;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            width: 150px; /* Adjust as needed */
+            height: 150px; /* Adjust as needed */
+            z-index: 10;
+            display: none; /* Hidden by default */
+            font-size: 0.75rem;
+            color: #333;
+            text-align: center;
+        }
+         #feature-map-display canvas {
+             display: block;
+             margin: 5px auto 0;
+             max-width: 100%;
+             height: auto;
+         }
+        /* Style for Tooltip */
+        #tooltip {
+            position: absolute;
+            display: none; /* Hidden by default */
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: pre-wrap; /* Allow line breaks */
+            z-index: 100; /* Ensure it's on top */
+            pointer-events: none; /* Prevent tooltip from blocking mouse events */
+            max-width: 200px;
+        }
+        /* Style for Modal */
+        #detail-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black */
+            z-index: 40; /* Below modal, above other content */
+            display: none; /* Hidden by default */
+        }
+        #detail-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #2d3748; /* gray-800 */
+            color: white;
+            padding: 1.5rem; /* p-6 */
+            border-radius: 0.5rem; /* rounded-lg */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-lg */
+            z-index: 50; /* Above backdrop */
+            display: none; /* Hidden by default */
+            min-width: 300px;
+            max-width: 90%; /* Responsive max width */
+        }
+        #detail-modal h4 {
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 600; /* font-semibold */
+            margin-bottom: 1rem; /* mb-4 */
+        }
+        #detail-modal p {
+            font-size: 0.875rem; /* text-sm */
+            margin-bottom: 0.5rem; /* mb-2 */
+            white-space: pre-wrap; /* Respect newlines in info */
+        }
+        #modal-close-button {
+            position: absolute;
+            top: 0.5rem; /* top-2 */
+            right: 0.5rem; /* right-2 */
+            background: none;
+            border: none;
+            color: #a0aec0; /* gray-500 */
+            font-size: 1.5rem; /* text-2xl */
+            line-height: 1;
+            cursor: pointer;
+        }
+         #modal-close-button:hover {
+             color: #e2e8f0; /* gray-300 */
+         }
+        /* Style for Quiz Modal */
+        #quiz-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Darker backdrop */
+            z-index: 60; /* Above detail modal backdrop */
+            display: none; /* Hidden by default */
+        }
+        #quiz-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #1a202c; /* gray-900 */
+            color: white;
+            padding: 1.5rem 2rem; /* p-6 px-8 */
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1); /* shadow-lg */
+            z-index: 70; /* Above backdrop */
+            display: none; /* Hidden by default */
+            min-width: 400px;
+            max-width: 600px; /* Wider for questions */
+            width: 90%;
+        }
+        #quiz-modal h4 {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 600; /* font-semibold */
+            margin-bottom: 1.5rem; /* mb-6 */
+            text-align: center;
+            color: #a0aec0; /* gray-400 */
+        }
+        #quiz-question-container {
+            margin-bottom: 1.5rem; /* mb-6 */
+        }
+        #quiz-question {
+            font-size: 1rem; /* text-base */
+            margin-bottom: 1rem; /* mb-4 */
+            line-height: 1.5;
+        }
+        #quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem; /* space-y-3 */
+        }
+        .quiz-option label {
+            display: flex;
+            align-items: center;
+            background-color: #2d3748; /* gray-800 */
+            padding: 0.75rem 1rem; /* py-3 px-4 */
+            border-radius: 0.375rem; /* rounded-md */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.875rem; /* text-sm */
+        }
+        .quiz-option label:hover {
+            background-color: #4a5568; /* gray-700 */
+        }
+        .quiz-option input[type="checkbox"] {
+            margin-right: 0.75rem; /* mr-3 */
+            accent-color: #4299e1; /* blue-500 */
+            width: 1rem;
+            height: 1rem;
+        }
+        #quiz-feedback {
+            margin-top: 1rem; /* mt-4 */
+            font-size: 0.875rem; /* text-sm */
+            min-height: 1.25rem; /* Ensure space for feedback */
+            text-align: center;
+        }
+        #quiz-feedback.correct {
+            color: #48bb78; /* green-500 */
+            font-weight: 600;
+        }
+        #quiz-feedback.incorrect {
+            color: #f56565; /* red-500 */
+            font-weight: 600;
+        }
+        #quiz-score {
+            text-align: right;
+            font-size: 0.875rem; /* text-sm */
+            color: #a0aec0; /* gray-500 */
+            margin-bottom: 1rem; /* mb-4 */
+        }
+        #quiz-controls {
+            display: flex;
+            justify-content: space-between; /* Adjust layout */
+            align-items: center;
+            margin-top: 1.5rem; /* mt-6 */
+        }
+        /* #quiz-submit-button uses .control-button class */
+        #quiz-close-button {
+            background: none;
+            border: none;
+            color: #a0aec0; /* gray-500 */
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        #quiz-close-button:hover {
+            color: #e2e8f0; /* gray-300 */
+        }
+        #quiz-results {
+            text-align: center;
+            margin-top: 2rem; /* mt-8 */
+        }
+        #quiz-results h5 {
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 600;
+            margin-bottom: 0.5rem; /* mb-2 */
+        }
+        #quiz-results p {
+            font-size: 1rem; /* text-base */
+            color: #cbd5e0; /* gray-400 */
+        }
+
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-900">
+
+    <div id="canvas-container">
+        <div id="info-panel">
+            <h3 class="text-lg font-semibold mb-2">Informasi Simulasi</h3>
+            <p><strong>Input Gambar:</strong> <span id="input-name">-</span></p>
+            <p><strong>Langkah Saat Ini:</strong> <span id="current-step">-</span></p>
+            <p><strong>Dimensi Data:</strong> <span id="data-dimensions">-</span></p>
+            <p class="mt-2 text-xs">Gunakan mouse untuk memutar (klik kiri), zoom (scroll), dan pan (klik kanan).</p>
+            <p class="mt-1 text-xs">Klik pada blok untuk info detail.</p>
+        </div>
+
+        <div id="controls">
+            <select id="input-select" class="control-button bg-gray-700 hover:bg-gray-800 text-white rounded-md px-3 py-1.5 text-sm">
+                <option value="sample1">Input Sampel 1</option>
+                <option value="sample2">Input Sampel 2</option>
+            </select>
+            <button id="reset-button" class="control-button">Reset</button>
+            <button id="prev-step-button" class="control-button" disabled>← Sebelumnya</button>
+            <button id="next-step-button" class="control-button">Selanjutnya →</button>
+            <button id="run-auto-button" class="control-button">Jalankan Otomatis</button>
+            <button id="quiz-button" class="control-button">Quiz</button> <!-- New Quiz Button -->
+        </div>
+
+        <div id="feature-map-display">
+            <p>Feature Map (Visualisasi)</p>
+            <canvas id="feature-map-canvas" width="128" height="128"></canvas>
+        </div>
+
+        </div>
+
+        <!-- Modal Structure -->
+        <div id="detail-modal-backdrop"></div>
+        <div id="detail-modal">
+            <button id="modal-close-button">&times;</button>
+            <h4 id="modal-title">Detail Blok</h4>
+            <p><strong>Nama:</strong> <span id="modal-block-name">-</span></p>
+            <p><strong>Dimensi Data:</strong> <span id="modal-block-dimensions">-</span></p>
+            <p><strong>Deskripsi:</strong></p>
+            <p id="modal-block-description">-</p>
+            <!-- Add more detail fields if needed -->
+        </div>
+
+        <!-- Quiz Modal Structure -->
+        <div id="quiz-modal-backdrop"></div>
+        <div id="quiz-modal">
+            <h4>U-Net Quiz</h4>
+            <div id="quiz-score">Skor: 0/0</div>
+            <div id="quiz-question-container">
+                <p id="quiz-question">Memuat pertanyaan...</p>
+                <div id="quiz-options">
+                    <!-- Options will be loaded here -->
+                </div>
+                <div id="quiz-feedback"></div>
+            </div>
+            <div id="quiz-results" style="display: none;">
+                <h5>Quiz Selesai!</h5>
+                <p id="quiz-final-score"></p>
+            </div>
+            <div id="quiz-controls">
+                <button id="quiz-close-button">Tutup</button>
+                <div> <!-- Group navigation/submit buttons -->
+                    <button id="quiz-back-button" class="control-button" disabled>← Back</button>
+                    <button id="quiz-submit-button" class="control-button">Submit Jawaban</button>
+                    <button id="quiz-next-button" class="control-button">Next →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tooltip Element -->
+        <div id="tooltip"></div>
+
+    <script>
+        // --- Konfigurasi Dasar Three.js ---
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        const container = document.getElementById('canvas-container');
+        const infoPanel = {
+            step: document.getElementById('current-step'),
+            dimensions: document.getElementById('data-dimensions'),
+            inputName: document.getElementById('input-name'),
+        };
+        const featureMapDisplay = document.getElementById('feature-map-display');
+        const featureMapCanvas = document.getElementById('feature-map-canvas');
+        const featureMapCtx = featureMapCanvas.getContext('2d');
+        let tooltipElement; // Variable for the tooltip
+        let modalBackdrop, modalElement, modalTitle, modalBlockName, modalBlockDimensions, modalBlockDescription, modalCloseButton;
+        let quizModalBackdrop, quizModal, quizButton, quizQuestionEl, quizOptionsEl, quizFeedbackEl, quizScoreEl, quizSubmitButton, quizCloseButton, quizResultsEl, quizFinalScoreEl, quizQuestionContainer; // Added quizQuestionContainer
+        let quizBackButton, quizNextButton; // Add variables for new buttons
+
+        // --- State Simulasi ---
+        let currentStepIndex = -1; // Belum dimulai
+        let simulationSteps = []; // Akan diisi dengan info tiap langkah
+        let networkObjects = {}; // Menyimpan objek Three.js untuk tiap layer/blok
+        let skipConnectionLines = []; // Menyimpan garis untuk skip connections
+        let isAutoRunning = false;
+        let autoRunInterval = null;
+        const defaultBlockColor = 0x0077cc; // Biru
+        const activeBlockColor = 0xffcc00; // Kuning
+        const skipConnectionColor = 0x00ff00; // Hijau
+        let isQuizActive = false;
+        let currentQuizQuestionIndex = 0;
+        let quizScore = 0;
+        let quizQuestions = []; // Will be populated in init
+        let quizAnswerSubmitted = false; // Track if current answer was submitted
+
+        // --- Data Sampel (Placeholder) ---
+        const sampleInputs = {
+            sample1: { name: "Sel Darah (Contoh)", initialDim: "128x128x3" },
+            sample2: { name: "Citra Medis (Contoh)", initialDim: "256x256x1" },
+        };
+        let currentInput = sampleInputs.sample1; // Default
+
+        // --- Elemen Kontrol ---
+        const inputSelect = document.getElementById('input-select');
+        const resetButton = document.getElementById('reset-button');
+        const prevStepButton = document.getElementById('prev-step-button');
+        const nextStepButton = document.getElementById('next-step-button');
+        const runAutoButton = document.getElementById('run-auto-button');
+
+        // --- Inisialisasi ---
+        function init() {
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a202c); // Warna latar belakang gelap (gray-900)
+
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 15; // Mundurkan kamera
+            camera.position.y = 5; // Naikkan sedikit
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // 4. Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Efek halus saat rotasi
+            controls.dampingFactor = 0.1;
+            controls.screenSpacePanning = false; // Batasi panning pada bidang xz
+
+            // 5. Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            // 6. Raycaster for interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // --- MOVED: Get Control, Tooltip and Modal Elements ---
+            // Ensure these are defined before resetSimulation is called
+            tooltipElement = document.getElementById('tooltip');
+            modalBackdrop = document.getElementById('detail-modal-backdrop');
+            modalElement = document.getElementById('detail-modal');
+            modalTitle = document.getElementById('modal-title');
+            modalBlockName = document.getElementById('modal-block-name');
+            modalBlockDimensions = document.getElementById('modal-block-dimensions');
+            modalBlockDescription = document.getElementById('modal-block-description');
+            modalCloseButton = document.getElementById('modal-close-button');
+
+            quizModalBackdrop = document.getElementById('quiz-modal-backdrop');
+            quizModal = document.getElementById('quiz-modal');
+            quizButton = document.getElementById('quiz-button'); // Assign quizButton here
+            quizQuestionEl = document.getElementById('quiz-question');
+            quizOptionsEl = document.getElementById('quiz-options');
+            quizFeedbackEl = document.getElementById('quiz-feedback');
+            quizScoreEl = document.getElementById('quiz-score');
+            quizSubmitButton = document.getElementById('quiz-submit-button');
+            quizCloseButton = document.getElementById('quiz-close-button');
+            quizResultsEl = document.getElementById('quiz-results');
+            quizFinalScoreEl = document.getElementById('quiz-final-score');
+            quizQuestionContainer = document.getElementById('quiz-question-container'); // Get question container
+            quizBackButton = document.getElementById('quiz-back-button'); // Get back button
+            quizNextButton = document.getElementById('quiz-next-button'); // Get next button
+            // --- END MOVED SECTION ---
+
+            // --- Add Listeners for Modals (Detail & Quiz Internal) ---
+            // Add listeners to close detail modal
+            modalCloseButton.addEventListener('click', hideModal);
+            modalBackdrop.addEventListener('click', hideModal); // Close on backdrop click
+
+            // Add Quiz Modal Internal Listeners (Added only ONCE here)
+            quizCloseButton.addEventListener('click', endQuiz);
+            quizModalBackdrop.addEventListener('click', endQuiz); // Also close on backdrop click
+            quizSubmitButton.addEventListener('click', handleQuizSubmit);
+            quizBackButton.addEventListener('click', handleQuizBack); // Add listener for back
+            quizNextButton.addEventListener('click', handleQuizNext); // Add listener for next
+            // --- END Add Listeners ---
+
+
+            // Disable Quiz button initially
+            if (quizButton) { // Check if quizButton exists before disabling
+                 quizButton.disabled = true;
+                 quizButton.textContent = "Memuat Quiz..."; // Indicate loading
+            }
+
+
+            // 7. Build the U-Net visualization & Set Initial State
+            buildUNetArchitecture();
+            addLabels(); // Panggil fungsi untuk menambahkan label setelah arsitektur dibuat
+            defineSimulationSteps(); // Definisikan langkah simulasi setelah arsitektur dibuat
+            resetSimulation(); // Set ke state awal - NOW safe to call updateButtonStates
+
+            // 8. Event Listeners (Simulation Controls)
+            window.addEventListener('resize', onWindowResize, false);
+            container.addEventListener('click', onCanvasClick, false); // Re-enable click listener
+            container.addEventListener('mousemove', onCanvasMouseMove, false); // Add mousemove listener
+            resetButton.addEventListener('click', resetSimulation);
+            prevStepButton.addEventListener('click', previousStep);
+            nextStepButton.addEventListener('click', nextStep);
+            runAutoButton.addEventListener('click', toggleAutoRun);
+            inputSelect.addEventListener('change', handleInputChange);
+
+            // REMOVED Quiz Listeners from here - Moved up or added in fetch
+
+            // --- Load Quiz Questions ---
+            fetch('quiz_questions.json') // Path relative to the HTML file
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    quizQuestions = data;
+                    console.log("Quiz questions loaded successfully:", quizQuestions.length, "questions");
+                    // Enable Quiz button and set up its main listener only after loading
+                    if (quizButton && quizQuestions.length > 0) {
+                        quizButton.disabled = false;
+                        quizButton.textContent = "Quiz";
+                        quizButton.addEventListener('click', startQuiz); // Add listener for the main quiz button HERE
+                        updateQuizScoreDisplay(); // Initialize score display (0/N)
+                    } else if (quizButton) {
+                         quizButton.textContent = "Quiz Kosong";
+                         console.warn("Quiz questions loaded, but the array is empty.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error loading quiz questions:", error);
+                    if (quizButton) {
+                        quizButton.textContent = "Quiz Gagal Dimuat";
+                        // Keep button disabled
+                    }
+                    // Optionally display an error message to the user in the quiz modal later
+                    quizQuestionEl.textContent = "Gagal memuat pertanyaan quiz. Periksa file 'quiz_questions.json'.";
+                });
+
+            // Start the animation loop
+            animate();
+        }
+
+        // --- Helper Function to Create Text Labels (Sprites) ---
+        function createLabel(text, position, color = '#ffffff', fontSize = 48, backgroundPadding = 10) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = `Bold ${fontSize}px Arial`;
+
+            // Ukur teks untuk menentukan ukuran canvas
+            const textMetrics = context.measureText(text);
+            const textWidth = textMetrics.width;
+            canvas.width = textWidth + backgroundPadding * 2;
+            canvas.height = fontSize + backgroundPadding * 2;
+
+            // Gambar background (opsional, bisa transparan)
+            // context.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Background semi-transparan
+            // context.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Gambar teks
+            context.font = `Bold ${fontSize}px Arial`; // Set ulang font setelah resize canvas
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+
+            // Skala sprite agar sesuai dengan scene
+            const scaleFactor = 0.01; // Sesuaikan nilai ini untuk ukuran label
+            sprite.scale.set(canvas.width * scaleFactor, canvas.height * scaleFactor, 1);
+
+            sprite.position.copy(position);
+            scene.add(sprite);
+            return sprite;
+        }
+
+        // --- Menambahkan Label ke Scene ---
+        function addLabels() {
+            const labelYOffset = 4; // Jarak vertikal label dari blok teratas
+            const encoderTopY = networkObjects['Encoder_1'].position.y;
+            const decoderTopY = networkObjects['Decoder_4'].position.y;
+            const inputY = networkObjects['Input_Image'].position.y;
+            const outputY = networkObjects['Output_Segmentation'].position.y;
+
+            // Label Input
+            createLabel("Input", new THREE.Vector3(
+                networkObjects['Input_Image'].position.x,
+                inputY + labelYOffset,
+                0
+            ));
+
+            // Label Encoder Path
+            createLabel("Encoder Path", new THREE.Vector3(
+                networkObjects['Encoder_1'].position.x, // X dari blok encoder pertama
+                encoderTopY + labelYOffset, // Y di atas blok encoder pertama
+                0
+            ));
+
+            // Label Bottleneck
+            createLabel("Bottleneck", new THREE.Vector3(
+                networkObjects['Bottleneck'].position.x,
+                networkObjects['Bottleneck'].position.y + labelYOffset * 0.6, // Sedikit lebih dekat ke bottleneck
+                0
+            ));
+
+            // Label Decoder Path
+            createLabel("Decoder Path", new THREE.Vector3(
+                networkObjects['Decoder_4'].position.x, // X dari blok decoder terakhir (paling atas)
+                decoderTopY + labelYOffset, // Y di atas blok decoder terakhir
+                0
+            ));
+
+            // Label Output
+            createLabel("Output", new THREE.Vector3(
+                networkObjects['Output_Segmentation'].position.x,
+                outputY + labelYOffset,
+                0
+            ));
+        }
+
+        // --- Membangun Visualisasi Arsitektur U-Net ---
+        function buildUNetArchitecture() {
+            // Ukuran dan posisi relatif (bisa disesuaikan)
+            const blockDepth = 0.5;
+            const levelHeight = 3; // Jarak vertikal antar level
+            const horizontalSpacing = 4; // Jarak horizontal antar blok di level yang sama
+            const contractingPathX = -horizontalSpacing * 1.5;
+            const expandingPathX = horizontalSpacing * 1.5;
+
+            // Helper function to create a block (layer group)
+            function createBlock(name, width, height, color = defaultBlockColor) {
+                const geometry = new THREE.BoxGeometry(width, height, blockDepth);
+                const material = new THREE.MeshStandardMaterial({ color: color, metalness: 0.3, roughness: 0.6 });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.name = name; // Nama untuk identifikasi
+
+                // --- Enhanced userData.info ---
+                let description = "Informasi detail belum tersedia.";
+                if (name.startsWith("Encoder")) {
+                    description = `Blok Encoder (${name.split('_')[1]}):\n- Bagian ini (Contracting Path) secara bertahap mengekstrak fitur dari gambar input sambil mengurangi ukurannya (resolusi spasial).\n- Dalam simulasi ini: Melakukan 2x (Konvolusi 3x3 + ReLU) untuk deteksi pola, diikuti Max Pooling 2x2 (kecuali blok pertama) untuk mengurangi dimensi spasial (misal, 128x128 -> 64x64) dan biasanya menggandakan jumlah fitur (channels).\n- Fitur yang diekstrak di level ini disimpan untuk Skip Connection ke blok Decoder yang sesuai.`;
+                } else if (name === "Bottleneck") {
+                    description = "Bottleneck:\n- Lapisan terdalam dan terkecil dalam arsitektur U-Net, menghubungkan Encoder dan Decoder.\n- Dalam simulasi ini: Menerima output dari Encoder terakhir setelah Max Pooling, lalu melakukan 2x (Konvolusi 3x3 + ReLU).\n- Menangkap informasi kontekstual tingkat tinggi (fitur paling abstrak) pada resolusi terendah (misal, 8x8).";
+                } else if (name.startsWith("Decoder")) {
+                    description = `Blok Decoder (${name.split('_')[1]}):\n- Bagian ini (Expanding Path) secara bertahap membangun kembali peta segmentasi, meningkatkan resolusi spasial.\n- Dalam simulasi ini: Melakukan Up-Convolution 2x2 (Transposed Convolution) untuk menggandakan dimensi spasial (misal, 16x16 -> 32x32) dan biasanya mengurangi separuh jumlah fitur.\n- Menggabungkan (concatenate) hasilnya dengan fitur dari Skip Connection Encoder yang sesuai (misal, Decoder 1 dengan Encoder 4).\n- Melakukan 2x (Konvolusi 3x3 + ReLU) pada fitur gabungan untuk menyempurnakan representasi.`;
+                } else if (name === "Output_Segmentation") {
+                    description = "Output Layer:\n- Lapisan terakhir dari U-Net yang menghasilkan peta segmentasi akhir.\n- Dalam simulasi ini: Menerima input dari blok Decoder terakhir (misal, 128x128x64) dan melakukan Konvolusi 1x1 untuk memetakan fitur ke jumlah kelas yang diinginkan (disini 1 channel untuk segmentasi biner, menghasilkan output 128x128x1).\n- Setiap piksel pada output mewakili probabilitas kelas (misal, objek vs latar belakang).";
+                } else if (name === "Input_Image") {
+                    description = "Input:\n- Gambar asli yang dimasukkan ke dalam jaringan U-Net.\n- Dalam simulasi ini: Dimensi awal (misal, 128x128x3 atau 256x256x1) ditentukan oleh pilihan input sampel.";
+                }
+
+                mesh.userData = {
+                    info: description, // Use the detailed description
+                    dimensions: "N/A" // Akan diupdate saat simulasi
+                };
+                scene.add(mesh);
+                networkObjects[name] = mesh;
+                return mesh;
+            }
+
+            // --- Contracting Path (Encoder) ---
+            const enc1 = createBlock("Encoder_1", 3, 3);
+            enc1.position.set(contractingPathX, levelHeight * 2, 0);
+            const enc2 = createBlock("Encoder_2", 2.5, 2.5);
+            enc2.position.set(contractingPathX, levelHeight * 1, 0);
+            const enc3 = createBlock("Encoder_3", 2, 2);
+            enc3.position.set(contractingPathX, levelHeight * 0, 0);
+            const enc4 = createBlock("Encoder_4", 1.5, 1.5);
+            enc4.position.set(contractingPathX, -levelHeight * 1, 0);
+
+            // --- Bottleneck ---
+            const bottleneck = createBlock("Bottleneck", 1, 1);
+            bottleneck.position.set(0, -levelHeight * 2, 0);
+
+            // --- Expanding Path (Decoder) ---
+            const dec1 = createBlock("Decoder_1", 1.5, 1.5);
+            dec1.position.set(expandingPathX, -levelHeight * 1, 0);
+            const dec2 = createBlock("Decoder_2", 2, 2);
+            dec2.position.set(expandingPathX, levelHeight * 0, 0);
+            const dec3 = createBlock("Decoder_3", 2.5, 2.5);
+            dec3.position.set(expandingPathX, levelHeight * 1, 0);
+            const dec4 = createBlock("Decoder_4", 3, 3);
+            dec4.position.set(expandingPathX, levelHeight * 2, 0);
+
+            // --- Output Layer ---
+            const output = createBlock("Output_Segmentation", 3, 3, 0x999999); // Warna abu-abu
+            output.position.set(expandingPathX + horizontalSpacing, levelHeight * 2, 0);
+
+             // --- Input Layer (Visual Placeholder) ---
+            const inputVis = createBlock("Input_Image", 3, 3, 0xcccccc); // Warna abu-abu terang
+            inputVis.position.set(contractingPathX - horizontalSpacing, levelHeight * 2, 0);
+            networkObjects["Input_Image"] = inputVis; // Tambahkan ke networkObjects
+
+            // Atur posisi kamera agar fokus ke tengah arsitektur
+            camera.lookAt(scene.position);
+        }
+
+        // --- Mendefinisikan Langkah-langkah Simulasi ---
+        function defineSimulationSteps() {
+            // Urutan nama blok sesuai aliran data
+            // Format: { blockName: "NamaBlok", dimension: "HxWx C", featureMapVis: function() }
+            simulationSteps = [
+                { blockName: "Input_Image", dimension: currentInput.initialDim, info: "Gambar Input Awal", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Encoder_1", dimension: "128x128x64", info: "Encoder Blok 1 (Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Encoder_2", dimension: "64x64x128", info: "Encoder Blok 2 (MaxPool, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Encoder_3", dimension: "32x32x256", info: "Encoder Blok 3 (MaxPool, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Encoder_4", dimension: "16x16x512", info: "Encoder Blok 4 (MaxPool, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Bottleneck", dimension: "8x8x1024", info: "Bottleneck (MaxPool, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                // Skip connection 1 (Enc4 -> Dec1)
+                { blockName: "Decoder_1", skipSource: "Encoder_4", dimension: "16x16x512", info: "Decoder Blok 1 (UpConv, Concat, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                // Skip connection 2 (Enc3 -> Dec2)
+                { blockName: "Decoder_2", skipSource: "Encoder_3", dimension: "32x32x256", info: "Decoder Blok 2 (UpConv, Concat, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                // Skip connection 3 (Enc2 -> Dec3)
+                { blockName: "Decoder_3", skipSource: "Encoder_2", dimension: "64x64x128", info: "Decoder Blok 3 (UpConv, Concat, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                // Skip connection 4 (Enc1 -> Dec4)
+                { blockName: "Decoder_4", skipSource: "Encoder_1", dimension: "128x128x64", info: "Decoder Blok 4 (UpConv, Concat, Conv, ReLU)", featureMapVis: generateSimpleFeatureMap },
+                { blockName: "Output_Segmentation", dimension: "128x128x1", info: "Output Akhir (Segmentasi)", featureMapVis: generateSegmentationMap } // Misal 1 channel output
+            ];
+        }
+
+        // --- Fungsi Simulasi ---
+        function resetSimulation() {
+            if (isQuizActive) return; // Don't reset if quiz is active
+            stopAutoRun(); // Hentikan auto run jika sedang berjalan
+            currentStepIndex = -1; // Kembali ke sebelum start
+            clearHighlightsAndConnections();
+            updateInfoPanel();
+            // Set input visual dimension
+            if (networkObjects["Input_Image"]) {
+                 networkObjects["Input_Image"].userData.dimensions = currentInput.initialDim;
+            }
+            featureMapDisplay.style.display = 'none'; // Sembunyikan display feature map
+            // Also reset quiz state if needed, though endQuiz handles most of it
+            isQuizActive = false; // Ensure quiz is marked as inactive
+            hideQuizModal(); // Ensure quiz modal is hidden on full reset
+            updateButtonStates(); // Update buttons after ensuring quiz is inactive
+        }
+
+        function nextStep() {
+            if (isQuizActive) return; // Don't allow simulation steps during quiz
+            if (currentStepIndex < simulationSteps.length - 1) {
+                currentStepIndex++;
+                updateSimulationState();
+            }
+            updateButtonStates();
+        }
+
+        function previousStep() {
+            if (isQuizActive) return; // Don't allow simulation steps during quiz
+            if (currentStepIndex > 0) { // Tidak bisa kembali sebelum langkah pertama
+                currentStepIndex--;
+                updateSimulationState();
+            } else if (currentStepIndex === 0) { // Kembali dari langkah pertama ke state awal
+                 resetSimulation(); // Reset penuh jika kembali dari langkah pertama
+            }
+            updateButtonStates();
+        }
+
+        function updateSimulationState() {
+            clearHighlightsAndConnections(); // Hapus highlight & garis sebelumnya
+
+            const step = simulationSteps[currentStepIndex];
+            const currentBlock = networkObjects[step.blockName];
+
+            if (currentBlock) {
+                // 1. Highlight block aktif (Hanya dengan glow)
+                // currentBlock.material.color.setHex(activeBlockColor); // <-- Tidak mengubah warna dasar
+                currentBlock.material.emissive.setHex(activeBlockColor); // Tetap buat memancarkan cahaya kuning
+                currentBlock.material.emissiveIntensity = 0.6; // Naikkan intensitas glow sedikit
+
+                // 2. Update info dimensi di userData block (untuk hover/klik nanti)
+                currentBlock.userData.dimensions = step.dimension;
+
+                // 3. Update info panel utama
+                updateInfoPanel(step);
+
+                // 4. Tampilkan visualisasi feature map
+                if (step.featureMapVis) {
+                    step.featureMapVis(featureMapCtx, step.dimension); // Panggil fungsi visualisasi
+                    featureMapDisplay.style.display = 'block';
+                } else {
+                    featureMapDisplay.style.display = 'none';
+                }
+
+                // 5. Gambar skip connection jika ada
+                if (step.skipSource) {
+                    const sourceBlock = networkObjects[step.skipSource];
+                    if (sourceBlock) {
+                        drawSkipConnection(sourceBlock, currentBlock);
+                    }
+                }
+            } else {
+                console.warn(`Objek untuk blok "${step.blockName}" tidak ditemukan.`);
+                 featureMapDisplay.style.display = 'none'; // Sembunyikan jika blok tidak ada
+            }
+        }
+
+        function clearHighlightsAndConnections() {
+            // Reset warna dan glow semua block
+            for (const name in networkObjects) {
+                const obj = networkObjects[name];
+                // Set warna dasar berdasarkan tipe blok (pastikan ini benar)
+                if (name === "Input_Image") {
+                     obj.material.color.setHex(0xcccccc); // Abu-abu terang untuk input
+                } else if (name === "Output_Segmentation") {
+                     obj.material.color.setHex(0x999999); // Abu-abu untuk output
+                } else {
+                     obj.material.color.setHex(defaultBlockColor); // Biru default untuk blok proses
+                }
+                 obj.material.emissive.setHex(0x000000); // Matikan glow
+                 obj.material.emissiveIntensity = 0;
+            }
+            // Hapus garis skip connection
+            skipConnectionLines.forEach(line => scene.remove(line));
+            skipConnectionLines = [];
+        }
+
+        function drawSkipConnection(sourceBlock, targetBlock) {
+            const points = [];
+            // Titik awal sedikit di depan source block
+            const startPoint = sourceBlock.position.clone();
+            startPoint.z += 0.3; // Sedikit offset Z
+             // Titik akhir sedikit di depan target block
+            const endPoint = targetBlock.position.clone();
+            endPoint.z += 0.3; // Sedikit offset Z
+
+            // Titik tengah untuk membuat lengkungan (opsional)
+            const midPointX = (startPoint.x + endPoint.x) / 2;
+            const midPointY = (startPoint.y + endPoint.y) / 2;
+            const midPointZ = startPoint.z + 2; // Lengkungkan ke depan
+
+            // Gunakan kurva untuk garis melengkung
+            const curve = new THREE.QuadraticBezierCurve3(
+                startPoint,
+                new THREE.Vector3(midPointX, midPointY, midPointZ),
+                endPoint
+            );
+
+            const curvePoints = curve.getPoints( 50 ); // Jumlah segmen garis
+            const geometry = new THREE.BufferGeometry().setFromPoints( curvePoints );
+            const material = new THREE.LineBasicMaterial( { color: skipConnectionColor, linewidth: 2 } ); // Buat garis lebih tebal
+
+            const line = new THREE.Line( geometry, material );
+            scene.add(line);
+            skipConnectionLines.push(line); // Simpan referensi untuk dihapus nanti
+        }
+
+        function updateInfoPanel(step = null) {
+            if (step) {
+                infoPanel.step.textContent = `${currentStepIndex + 1}. ${step.info || step.blockName}`;
+                infoPanel.dimensions.textContent = step.dimension;
+            } else { // Kondisi reset
+                infoPanel.step.textContent = "Belum dimulai";
+                infoPanel.dimensions.textContent = "-";
+            }
+             infoPanel.inputName.textContent = currentInput.name;
+        }
+
+        function updateButtonStates() {
+            const simActive = !isQuizActive; // Simulation is active if quiz is NOT active
+            prevStepButton.disabled = !simActive || currentStepIndex <= -1;
+            nextStepButton.disabled = !simActive || currentStepIndex >= simulationSteps.length - 1;
+            runAutoButton.textContent = isAutoRunning ? "Hentikan Otomatis" : "Jalankan Otomatis";
+            runAutoButton.disabled = !simActive || isAutoRunning; // Disable if quiz active OR if already auto-running
+            resetButton.disabled = !simActive;
+            inputSelect.disabled = !simActive;
+
+            // Only update quizButton state if it has been successfully loaded and enabled initially
+            if (quizButton && quizQuestions.length > 0) { // Check if quiz is loadable
+                 quizButton.disabled = isAutoRunning || isQuizActive; // Disable quiz if auto-run active OR quiz already active
+            } else if (quizButton) {
+                 quizButton.disabled = true; // Keep disabled if loading failed or no questions
+            }
+        }
+
+        function toggleAutoRun() {
+            if (isQuizActive) return; // Don't toggle if quiz is active
+            if (isAutoRunning) {
+                stopAutoRun();
+            } else {
+                startAutoRun();
+            }
+            // updateButtonStates() is called within start/stopAutoRun
+        }
+
+        function startAutoRun() {
+            if (isQuizActive) return; // Don't start if quiz is active
+            // ... (rest of startAutoRun logic remains largely the same) ...
+            isAutoRunning = true;
+            // runAutoButton.textContent = "Hentikan Otomatis"; // Set by updateButtonStates
+            // Disable tombol lain saat auto run (handled by updateButtonStates)
+            // prevStepButton.disabled = true;
+            // nextStepButton.disabled = true;
+            // resetButton.disabled = true;
+            // inputSelect.disabled = true;
+            // quizButton.disabled = true; // Handled by updateButtonStates
+
+            // Ensure the first step runs immediately if starting from reset state
+            if (currentStepIndex === -1) {
+                nextStep(); // This already calls updateButtonStates
+            } else {
+                 updateButtonStates(); // Update buttons if not starting from -1
+            }
+
+
+            autoRunInterval = setInterval(() => {
+                // Stop condition check moved inside nextStep/resetSimulation logic
+                // if (!isAutoRunning || isQuizActive) { // Stop if quiz starts or manually stopped
+                //      stopAutoRun(); // Ensure interval is cleared
+                //      return;
+                // }
+
+                if (currentStepIndex < simulationSteps.length - 1) {
+                    nextStep(); // Calls updateButtonStates
+                } else {
+                    // Reached the end, loop back to the beginning
+                    currentStepIndex = -1; // Reset index before next step
+                    clearHighlightsAndConnections(); // Clear visuals before starting over
+                    updateInfoPanel(); // Update panel to initial state briefly
+                    // No need to call resetSimulation() fully, just loop
+                    setTimeout(nextStep, 100); // Small delay before starting the first step again
+                }
+            }, 1000); // Interval 1 detik per langkah
+             // updateButtonStates(); // Called after first nextStep or immediately if not starting from -1
+        }
+
+        function stopAutoRun() {
+            if (autoRunInterval) {
+                clearInterval(autoRunInterval);
+                autoRunInterval = null; // Clear interval ID
+            }
+            isAutoRunning = false;
+            // runAutoButton.textContent = "Jalankan Otomatis"; // Set in updateButtonStates
+            // Enable tombol lain lagi (handled by updateButtonStates)
+            updateButtonStates(); // Update buttons state after stopping
+        }
+
+        function handleInputChange(event) {
+             if (isQuizActive) return; // Don't change input during quiz
+             const selectedValue = event.target.value;
+             currentInput = sampleInputs[selectedValue];
+             // Perbarui definisi langkah simulasi karena dimensi awal berubah
+             defineSimulationSteps();
+             resetSimulation(); // Reset simulasi dengan input baru (calls updateButtonStates)
+        }
+
+
+        // --- Visualisasi Feature Map Sederhana (Placeholder) ---
+        function generateSimpleFeatureMap(ctx, dimensions) {
+            const size = 128; // Ukuran canvas
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = '#f0f0f0'; // Latar belakang
+            ctx.fillRect(0, 0, size, size);
+
+            // Parse dimensi (contoh: "128x128x64")
+            const dims = dimensions.split('x').map(Number);
+            const channels = dims[2] || 1;
+
+            // Gambar grid acak sederhana untuk representasi
+            const cellSize = 4;
+            for (let y = 0; y < size; y += cellSize) {
+                for (let x = 0; x < size; x += cellSize) {
+                    // Warna acak berdasarkan channel (simplifikasi)
+                    const grayValue = Math.floor(Math.random() * 200) + 55; // Nilai abu-abu acak
+                    const blueTint = Math.min(255, Math.floor(Math.random() * channels * 0.5)); // Sedikit warna biru berdasarkan channel
+                    ctx.fillStyle = `rgb(${grayValue}, ${grayValue}, ${Math.min(255, grayValue + blueTint)})`;
+                    ctx.fillRect(x, y, cellSize, cellSize);
+                }
+            }
+             ctx.strokeStyle = '#ccc';
+             ctx.lineWidth = 0.5;
+             // Optional: Draw grid lines
+             // for (let i = 0; i <= size; i += cellSize*2) {
+             //     ctx.beginPath();
+             //     ctx.moveTo(i, 0);
+             //     ctx.lineTo(i, size);
+             //     ctx.stroke();
+             //     ctx.beginPath();
+             //     ctx.moveTo(0, i);
+             //     ctx.lineTo(size, i);
+             //     ctx.stroke();
+             // }
+        }
+
+        // --- Visualisasi Output Segmentasi (Placeholder) ---
+        function generateSegmentationMap(ctx, dimensions) {
+             const size = 128;
+             ctx.clearRect(0, 0, size, size);
+
+             // Gambar pola sederhana (misal: lingkaran di tengah)
+             ctx.fillStyle = '#333'; // Background
+             ctx.fillRect(0, 0, size, size);
+             ctx.fillStyle = '#00ff00'; // Warna segmentasi (hijau)
+             ctx.beginPath();
+             ctx.arc(size / 2, size / 2, size / 3, 0, Math.PI * 2); // Lingkaran
+             ctx.fill();
+             ctx.fillStyle = '#555';
+             ctx.font = '10px Arial';
+             ctx.textAlign = 'center';
+             ctx.fillText('Contoh Output', size/2, size - 5);
+        }
+
+
+        // --- Event Handling ---
+        function onWindowResize() {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Function to handle click - Now opens the detail modal
+        function onCanvasClick(event) {
+            if (isQuizActive) return; // Ignore clicks if quiz is active
+
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            mouse.x = (event.clientX / container.clientWidth) * 2 - 1;
+            mouse.y = - (event.clientY / container.clientHeight) * 2 + 1;
+
+            // Update the picking ray
+            raycaster.setFromCamera(mouse, camera);
+
+            // Calculate objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(Object.values(networkObjects), false); // Only check network blocks
+
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object;
+                if (tooltipElement) tooltipElement.style.display = 'none'; // Hide tooltip on click
+                showModal(intersectedObject); // Call function to show detail modal
+            } else {
+                hideModal(); // Hide detail modal if clicking outside blocks (optional)
+            }
+        }
+
+        // Function to handle mouse move for tooltip
+        function onCanvasMouseMove(event) {
+            if (isQuizActive || modalElement.style.display === 'block') { // Hide tooltip if quiz active or detail modal shown
+                 if (tooltipElement) tooltipElement.style.display = 'none';
+                 return;
+            }
+            // Calculate mouse position relative to the container
+            const rect = container.getBoundingClientRect();
+            const canvasX = event.clientX - rect.left;
+            const canvasY = event.clientY - rect.top;
+
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            mouse.x = (canvasX / container.clientWidth) * 2 - 1;
+            mouse.y = - (canvasY / container.clientHeight) * 2 + 1;
+
+            // Update the picking ray
+            raycaster.setFromCamera(mouse, camera);
+
+            // Calculate objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(Object.values(networkObjects), false); // Only check network blocks
+
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object;
+
+                // Update tooltip content and position
+                if (tooltipElement) {
+                    tooltipElement.style.display = 'block';
+                    tooltipElement.style.left = `${event.clientX + 15}px`; // Position tooltip near cursor
+                    tooltipElement.style.top = `${event.clientY + 15}px`;
+                    // Keep tooltip concise - add click instruction
+                    tooltipElement.textContent = `Blok: ${intersectedObject.name}\nDimensi: ${intersectedObject.userData.dimensions}\n(Klik untuk detail)`;
+                }
+
+            } else {
+                // Hide tooltip if not hovering over a block
+                if (tooltipElement) tooltipElement.style.display = 'none';
+            }
+        }
+
+        // --- Modal Functions (Detail Modal) ---
+        function showModal(blockObject) {
+            modalTitle.textContent = `Detail Blok: ${blockObject.name}`;
+            modalBlockName.textContent = blockObject.name;
+            modalBlockDimensions.textContent = blockObject.userData.dimensions || "N/A";
+            modalBlockDescription.textContent = blockObject.userData.info || "Tidak ada deskripsi.";
+
+            modalElement.style.display = 'block';
+            modalBackdrop.style.display = 'block';
+            if (tooltipElement) tooltipElement.style.display = 'none'; // Hide tooltip when modal opens
+        }
+
+        function hideModal() {
+            modalElement.style.display = 'none';
+            modalBackdrop.style.display = 'none';
+        }
+
+
+        // --- Quiz Functions ---
+        function startQuiz() {
+            console.log("startQuiz called.");
+            if (isAutoRunning || quizQuestions.length === 0 || isQuizActive) {
+                 console.log("startQuiz aborted: isAutoRunning=", isAutoRunning, "quizQuestions.length=", quizQuestions.length, "isQuizActive=", isQuizActive);
+                 return;
+            }
+
+            // Stop simulation if running
+            if (isAutoRunning) {
+                stopAutoRun();
+                console.log("stopAutoRun called from startQuiz.");
+            }
+
+            isQuizActive = true;
+            currentQuizQuestionIndex = 0;
+            quizScore = 0;
+            quizAnswerSubmitted = false; // Reset submitted flag globally (will be handled per question display)
+
+            // --- HIDE SIMULATION VIEW ---
+            console.log("Hiding simulation container...");
+            container.style.display = 'none'; // Hide the main canvas container
+            if (tooltipElement) {
+                tooltipElement.style.display = 'none'; // Ensure tooltip is hidden
+            }
+            // --- END HIDE SIMULATION VIEW ---
+
+
+            updateButtonStates(); // Disable simulation controls
+            updateQuizScoreDisplay();
+            displayQuizQuestion(currentQuizQuestionIndex); // Display first question (handles button states)
+            quizResultsEl.style.display = 'none'; // Hide results area
+            quizQuestionContainer.style.display = 'block'; // Show question area
+            quizSubmitButton.onclick = handleQuizSubmit; // Ensure submit handler is attached
+
+            // Ensure correct buttons are visible/hidden initially
+            quizSubmitButton.style.display = 'inline-block';
+            quizBackButton.style.display = 'inline-block';
+            quizNextButton.style.display = 'inline-block';
+            quizCloseButton.style.display = 'inline-block'; // Keep close button always visible
+
+            console.log("Showing quiz modal and backdrop...");
+            quizModal.style.display = 'block';
+            quizModalBackdrop.style.display = 'block';
+            // ... logging ...
+        }
+
+        function endQuiz() {
+            console.log("endQuiz called.");
+            isQuizActive = false;
+            hideQuizModal();
+
+            // --- SHOW SIMULATION VIEW ---
+            console.log("Showing simulation container...");
+            container.style.display = 'block'; // Show the main canvas container again
+            // --- END SHOW SIMULATION VIEW ---
+
+            updateButtonStates(); // Re-enable simulation controls
+        }
+
+        function hideQuizModal() {
+             console.log("hideQuizModal called.");
+             quizModal.style.display = 'none';
+             quizModalBackdrop.style.display = 'none';
+        }
+
+        function displayQuizQuestion(index) {
+            // ... existing checks for question loading and index bounds ...
+            if (index >= quizQuestions.length) {
+                showQuizResults();
+                return;
+            }
+
+            const q = quizQuestions[index];
+            console.log(`Displaying question ${index + 1}:`, q.question);
+            quizQuestionEl.textContent = `Pertanyaan ${index + 1}: ${q.question}`;
+            quizOptionsEl.innerHTML = ''; // Clear previous options
+            quizFeedbackEl.textContent = ''; // Clear feedback
+            quizFeedbackEl.className = 'quiz-feedback'; // Reset feedback style
+            quizAnswerSubmitted = false; // Reset submitted flag when displaying/navigating
+
+            q.options.forEach((option, i) => {
+                const optionId = `q${index}_option${i}`;
+                const div = document.createElement('div');
+                div.className = 'quiz-option';
+                div.innerHTML = `
+                    <label for="${optionId}">
+                        <input type="checkbox" id="${optionId}" name="quizOption${index}" value="${i}">
+                        ${option}
+                    </label>
+                `;
+                quizOptionsEl.appendChild(div);
+            });
+
+            // Update button states
+            quizSubmitButton.textContent = "Submit Jawaban";
+            quizSubmitButton.disabled = false; // Enable submit by default when navigating
+            quizBackButton.disabled = (index === 0); // Disable back if first question
+            quizNextButton.disabled = (index >= quizQuestions.length - 1); // Disable next if last question
+
+            quizQuestionContainer.style.display = 'block'; // Ensure question area is visible
+            quizResultsEl.style.display = 'none'; // Ensure results area is hidden
+        }
+
+        function handleQuizBack() {
+            if (!isQuizActive || currentQuizQuestionIndex <= 0) return;
+            currentQuizQuestionIndex--;
+            console.log("Navigating back to question:", currentQuizQuestionIndex + 1);
+            displayQuizQuestion(currentQuizQuestionIndex);
+        }
+
+        function handleQuizNext() {
+            if (!isQuizActive || currentQuizQuestionIndex >= quizQuestions.length - 1) return;
+            currentQuizQuestionIndex++;
+            console.log("Navigating next to question:", currentQuizQuestionIndex + 1);
+            displayQuizQuestion(currentQuizQuestionIndex);
+        }
+
+
+        function handleQuizSubmit() {
+            if (!isQuizActive || quizAnswerSubmitted) return; // Don't submit if already submitted for this view
+            console.log("handleQuizSubmit called. currentQuestionIndex:", currentQuizQuestionIndex);
+
+            // Submit the current answer
+            const selectedOptions = quizOptionsEl.querySelectorAll('input[type="checkbox"]:checked');
+            if (selectedOptions.length === 0) {
+                quizFeedbackEl.textContent = "Silakan pilih setidaknya satu jawaban.";
+                quizFeedbackEl.className = 'quiz-feedback incorrect';
+                return; // Don't proceed if no answer selected
+            }
+
+            const selectedAnswers = Array.from(selectedOptions).map(input => parseInt(input.value));
+            const currentQuestion = quizQuestions[currentQuizQuestionIndex];
+            console.log("Submitting answer for question", currentQuizQuestionIndex + 1, "Selected:", selectedAnswers);
+
+            const isCorrect = checkQuizAnswer(selectedAnswers, currentQuestion.correctAnswers);
+
+            if (isCorrect) {
+                quizScore++; // Increment score only on the first correct submission for a question (needs better state if re-answering allowed)
+                quizFeedbackEl.textContent = "Benar!";
+                quizFeedbackEl.className = 'quiz-feedback correct';
+                console.log("Answer correct. Score:", quizScore);
+            } else {
+                quizFeedbackEl.textContent = `Salah. Jawaban yang benar: ${formatCorrectAnswers(currentQuestion)}`;
+                quizFeedbackEl.className = 'quiz-feedback incorrect';
+                console.log("Answer incorrect.");
+            }
+
+            quizAnswerSubmitted = true; // Mark as submitted for this question view
+            updateQuizScoreDisplay();
+            quizSubmitButton.disabled = true; // Disable submit after answering for this view
+            // quizSubmitButton.textContent = "Jawaban Terkirim"; // Optional: Change text
+
+            // Disable checkboxes after submitting
+            const allCheckboxes = quizOptionsEl.querySelectorAll('input[type="checkbox"]');
+            allCheckboxes.forEach(cb => cb.disabled = true);
+
+            // Note: Score calculation might need adjustment if users can go back and change answers.
+            // Current simple approach: score increments only once per question index if correct on first submit shown.
+        }
+
+        // Missing functions - add these before showQuizResults
+        function checkQuizAnswer(selectedAnswers, correctAnswers) {
+            // Check if arrays have the same length and same values (regardless of order)
+            if (selectedAnswers.length !== correctAnswers.length) {
+                return false;
+            }
+            
+            // Make copies to avoid modifying the originals
+            const selected = [...selectedAnswers].sort();
+            const correct = [...correctAnswers].sort();
+            
+            // Compare each element
+            for (let i = 0; i < selected.length; i++) {
+                if (selected[i] !== correct[i]) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        function formatCorrectAnswers(question) {
+            // Format the correct answers as text for feedback
+            const correctIndices = question.correctAnswers;
+            const correctOptions = correctIndices.map(index => 
+                String.fromCharCode(65 + index) + ": " + question.options[index]
+            );
+            
+            return correctOptions.join(", ");
+        }
+        
+        function updateQuizScoreDisplay() {
+            // Update the quiz score display element
+            if (quizScoreEl) {
+                quizScoreEl.textContent = `Skor: ${quizScore}/${quizQuestions.length}`;
+            }
+        }
+
+        function showQuizResults() {
+            console.log("showQuizResults called.");
+            // ... existing checks ...
+
+            quizQuestionContainer.style.display = 'none'; // Hide question area
+            quizResultsEl.style.display = 'block'; // Show results area
+            quizFinalScoreEl.textContent = `Skor Akhir Anda: ${quizScore} dari ${quizQuestions.length} soal.`;
+
+            // Hide navigation/submit buttons, keep only Close
+            quizSubmitButton.style.display = 'none';
+            quizBackButton.style.display = 'none';
+            quizNextButton.style.display = 'none';
+            quizCloseButton.style.display = 'inline-block'; // Ensure close is visible
+
+            // No need to change submit button's onclick here, just hide it.
+            console.log("Quiz results shown. Navigation/Submit hidden.");
+        }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            // Only update OrbitControls if the simulation is visible and quiz is not active
+            if (!isQuizActive && container.style.display !== 'none') {
+                 controls.update();
+            }
+            renderer.render(scene, camera);
+        }
+
+        // --- Mulai Aplikasi ---
+        init();
+
+    </script>
+
+</body>
+</html>
