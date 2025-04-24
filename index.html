@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U-Net Simulation</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <h1>U-Net Simulation</h1>
+    <div class="container">
+        <div class="upload-section">
+            <input type="file" id="imageUpload" accept="image/*">
+            <button id="processBtn">Process Image</button>
+        </div>
+        <div class="image-container">
+            <div>
+                <h3>Original Image</h3>
+                <img id="originalImage" src="#" alt="Original image will appear here">
+            </div>
+            <div>
+                <h3>Processed Image</h3>
+                <img id="processedImage" src="#" alt="Processed image will appear here">
+            </div>
+        </div>
+        <div id="loadingIndicator" class="hidden">Processing...</div>
+    </div>
+    
+    <script src="js/simulation.js"></script>
+</body>
+</html>
